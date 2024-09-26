@@ -19,6 +19,12 @@ class Mad4Condor(object):
         self.out_lhe   = lhe 
         self.out_hepmc = hepmc
         
+        # image = self.cfg["run"]["image"]
+        # assert os.path.isfile(f"/MadLAD/{image}.sif"), "Singularity image not found"
+        
+        if self.cfg["run"]["auto-launch"]==False:
+            raise ValueError("auto-launch must be set to true for running with Condor")
+        
         self.create_directory()
         self.write_job_script()
         self.specify_outputs()
@@ -66,6 +72,7 @@ cd -        # Return to condor work directory
         
         evt_dir  = 'run_01_decayed_1'  if 'block_madspin' in list(self.cfg['gen'].keys()) else 'run_01'
         lhe_file = 'unweighted_events' if self.cfg["gen"]["block_model"]["order"]=="lo"   else 'events'
+        hepmc_file = 'tag_1_pythia8_events.hepmc.gz' if self.cfg["gen"]["block_model"]["order"]=="lo" else 'events_PYTHIA8_0.hepmc'
         
         if self.out_lhe:
             self.outputs_string += f'MadLAD/{self.name}/Events/{evt_dir}/{lhe_file}.lhe.gz, '
@@ -73,8 +80,8 @@ cd -        # Return to condor work directory
         
         if self.out_hepmc:
             if self.cfg["run"]["shower"] == True:
-                self.outputs_string += f'MadLAD/{self.name}/Events/{evt_dir}/events_PYTHIA8_0.hepmc, '
-                self.remaps_string  += f'events_PYTHIA8_0.hepmc = events_$(Cluster)_$(Process).hepmc; '
+                self.outputs_string += f'MadLAD/{self.name}/Events/{evt_dir}/{hepmc_file}, '
+                self.remaps_string  += f'{hepmc_file} = $(Cluster)_$(Process)_{hepmc_file}; '
                 
             else: 
                 print("Shower is turned off, will not transfer HepMC file or Delphes.root file")
