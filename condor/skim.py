@@ -7,8 +7,8 @@ from itertools import chain
 import csv
 
 # from mad4batch.ROOT_skim import skim_delphes
-from mad4condor.delphes_branches import branches as DB
-from mad4condor.delphes_branches import light_branches
+from condor.delphes_branches import branches as DB
+from condor.delphes_branches import light_branches
 
 def write_job_script(path,output_file,branch_string):
     text = f"""#!/bin/bash
@@ -39,7 +39,7 @@ request_cpus = 4
 request_memory = 1 GB
 transfer_executable = True
 should_transfer_files = YES
-transfer_input_files    = ../mad4condor/skim_delphes, {infile_template}_$(Process).root
+transfer_input_files    = ../condor/skim_delphes, {infile_template}_$(Process).root
 transfer_output_files = {outfile}
 transfer_output_remaps = "{outfile} = {outfile.replace(".root","")}_$(Process).root"
 
@@ -53,8 +53,6 @@ queue {Nfiles}"""
 
 def run(args):
     
-
-    
     #Check input files    
     mypath = args.directory 
     files_to_skim = []
@@ -65,13 +63,14 @@ def run(args):
     if args.Nfiles:
         files_to_skim = files_to_skim[:args.Nfiles]
         
-    infile_template = args.infile or "_".join(files_to_skim[0].split("_")[:2])
+    infile_template  = args.infile or "_".join(files_to_skim[0].split("_")[:2])
     outfile_template = args.outfile or f"{infile_template}_skim.root"
     if outfile_template[-5:]!=".root":
         outfile_template = f"{outfile_template}.root"
     
     print(f"Skimming {len(files_to_skim)} files in directory {mypath} with name template {infile_template}")    
 
+    ## Assigning branches
     if args.categories is not None:
         if args.categories=="HighLevel":
             keys = ["Event","Jet","Muon","Electron","MissingET"]

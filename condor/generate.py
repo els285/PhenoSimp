@@ -5,6 +5,7 @@ from os import listdir
 from os.path import isfile, join
 from datetime import datetime
 import argparse
+from warnings import warn 
 
 
 class Mad4Condor(object):
@@ -20,7 +21,11 @@ class Mad4Condor(object):
         self.out_hepmc = hepmc
         
         # image = self.cfg["run"]["image"]
-        # assert os.path.isfile(f"/MadLAD/{image}.sif"), "Singularity image not found"
+        # assert os.path.isfile(f"/MadLAD/{image}.sif"), "Singularity image not
+        # found"
+        if "block_delphes" not in list(self.cfg["gen"].keys()):
+            warn("Delphes is turned off, so no ROOT file will be produced")
+            
         
         if self.cfg["run"]["auto-launch"]==False:
             raise ValueError("auto-launch must be set to true for running with Condor")
@@ -120,15 +125,15 @@ queue {self.Njobs}"""
        
 def main():
     
-    parser = argparse.ArgumentParser(description="Skim multiple Delphes ROOT file")
-    parser.add_argument("output_file", type=str, help="Path to the output ROOT file")
-    parser.add_argument("Njobs", type=int, help="Branches to keep")
+    parser = argparse.ArgumentParser(description="Generate HTCondor jobs for generation")
+    parser.add_argument("--config", type=str, help="Config name, no need to point to the directory")
+    parser.add_argument("--Njobs", type=int, help="Number of jobs")
     parser.add_argument("--lhe",action="store_true",required=False)
     parser.add_argument("--hepmc",action="store_true",required=False)
     
     args = parser.parse_args()   
          
-    config_filepath = f"MadLAD/processes/{args.output_file}"
+    config_filepath = f"MadLAD/processes/{args.config}"
    
     with open(config_filepath) as stream:
         try:
