@@ -168,7 +168,6 @@ indices = ak.concatenate([ak.unflatten(min_DR_dW1,1,axis=0),
 The delta-R matching is not always successful: matched branch indiciates whether
 there is a unique set of indices
 """
-d["matched"]=ak.fill_none(((indices[:,0]+indices[:,1]+indices[:,2])!=3)*1,float("nan"))
 
 """
 Sorting the indices to reflect the desired order
@@ -184,6 +183,16 @@ d["W_decay_mass"]     = ak.fill_none(Wdecay_combined_m[final_indices],float("nan
 d["W_decay_id"]       = ak.fill_none(Wdecay_combined_id[final_indices],float("nan"))
 
 d["EventNumber"]      = tree["Event.Number"].array()
+
+d["duplicate_matched"]=ak.fill_none(((ak.sum(indices,axis=1))!=3)*1,float("nan"))
+
+
+all_minima = ak.concatenate([DR_dW1[ak.unflatten(indices[:,0],1,axis=0)],
+                             DR_dW2[ak.unflatten(indices[:,1],1,axis=0)],
+                             DR_dW3[ak.unflatten(indices[:,2],1,axis=0)]],axis=1)
+
+
+d["greater_than_0p4"] = ak.count_nonzero(all_minima>0.4,axis=1)
 
 
 print("Truth particle parsing complete")
