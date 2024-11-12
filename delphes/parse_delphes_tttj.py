@@ -32,6 +32,10 @@ d["W_e"]        = tree["Particle.E"].array()[_22mask & W_mask]
 d["W_mass"]     = tree["Particle.Mass"].array()[_22mask & W_mask]
 d["W_id"]       = tree["Particle.PID"].array()[_22mask & W_mask] 
 
+assert ak.count_nonzero(ak.count(d["top_id"],axis=1) !=3 ) == 0, "There are events with other than three top quarks"
+assert ak.count_nonzero(ak.count(d["W_id"],axis=1)   !=3 ) == 0, "There are events with other than four on-shell W bosons"
+
+
 status23    = tree["Particle.Status"].array()==23
 
 # B quarks
