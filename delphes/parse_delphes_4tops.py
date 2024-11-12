@@ -53,14 +53,29 @@ d["b_id"]       = tree["Particle.PID"].array()[status23 & bottom_mask]
 Hadronic W decays are taken from status==23 with PDGID filter
 """
 print("Extracting hadronic W decay information")
-only_quarks_mask = abs(tree["Particle.PID"].array()[status23])<=6
+# only_quarks_mask = abs(tree["Particle.PID"].array()[status23])<=6
+# status_23_mothers = tree["Particle.M1"].array()[status23]
+# status_23_mothers_are_Ws_mask = abs(tree["Particle.PID"].array()[status_23_mothers])==24
 
-W_hadronic_decays_id    = tree["Particle.PID"].array()[status23][only_quarks_mask][:,3:]
-W_hadronic_decays_pt    = tree["Particle.PT"].array()[status23][only_quarks_mask][:,3:]
-W_hadronic_decays_eta   = tree["Particle.Eta"].array()[status23][only_quarks_mask][:,3:]
-W_hadronic_decays_phi   = tree["Particle.Phi"].array()[status23][only_quarks_mask][:,3:]
-W_hadronic_decays_e     = tree["Particle.E"].array()[status23][only_quarks_mask][:,3:]
-W_hadronic_decays_m     = tree["Particle.Mass"].array()[status23][only_quarks_mask][:,3:]
+
+# W_hadronic_decays_id    = tree["Particle.PID"].array()[status23][only_quarks_mask][:,3:]
+# W_hadronic_decays_pt    = tree["Particle.PT"].array()[status23][only_quarks_mask][:,3:]
+# W_hadronic_decays_eta   = tree["Particle.Eta"].array()[status23][only_quarks_mask][:,3:]
+# W_hadronic_decays_phi   = tree["Particle.Phi"].array()[status23][only_quarks_mask][:,3:]
+# W_hadronic_decays_e     = tree["Particle.E"].array()[status23][only_quarks_mask][:,3:]
+# W_hadronic_decays_m     =
+# tree["Particle.Mass"].array()[status23][only_quarks_mask][:,3:]
+
+quarks_mask = abs(tree["Particle.PID"].array()[status23])<=6
+status_23_mothers = tree["Particle.M1"].array()[status23]
+status_23_mothers_are_Ws_mask = abs(tree["Particle.PID"].array()[status_23_mothers])==24
+
+W_hadronic_decays_id    = tree["Particle.PID"].array()[status23][status_23_mothers_are_Ws_mask & quarks_mask]
+W_hadronic_decays_pt    = tree["Particle.PT"].array()[status23][status_23_mothers_are_Ws_mask & quarks_mask]
+W_hadronic_decays_eta   = tree["Particle.Eta"].array()[status23][status_23_mothers_are_Ws_mask & quarks_mask]
+W_hadronic_decays_phi   = tree["Particle.Phi"].array()[status23][status_23_mothers_are_Ws_mask & quarks_mask]
+W_hadronic_decays_e     = tree["Particle.E"].array()[status23][status_23_mothers_are_Ws_mask & quarks_mask]
+W_hadronic_decays_m     = tree["Particle.Mass"].array()[status23][status_23_mothers_are_Ws_mask & quarks_mask]
 
 # Leptons
 """
