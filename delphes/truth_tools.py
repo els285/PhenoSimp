@@ -81,9 +81,9 @@ def parse_reco(tree,r):
     r["el_charge"]  =  tree["Electron.Charge"].array()
 
     r["mu_pt"]      =  tree["Muon.PT"].array()
-    r["mu_pt"]      =  tree["Muon.Eta"].array()
-    r["mu_pt"]      =  tree["Muon.Phi"].array()
-    r["mu_charge"]  = tree["Muon.Charge"].array()
+    r["mu_eta"]      =  tree["Muon.Eta"].array()
+    r["mu_phi"]      =  tree["Muon.Phi"].array()
+    r["mu_charge"]  =  tree["Muon.Charge"].array()
 
     r["met_met"]    =  tree["MissingET.MET"].array()
     r["met_eta"]    =  tree["MissingET.Eta"].array()
