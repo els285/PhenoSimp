@@ -42,7 +42,6 @@ def parse_jets(reco,selection):
 
     return jet_data
 
-
 def parse_leptons(reco,selection):
     
     """
@@ -53,7 +52,6 @@ def parse_leptons(reco,selection):
                           "eta":reco["el_eta"].array(),
                           "phi":reco["el_phi"].array(),
                           "m":0.5110e-3})[selection]
-
 
     muon_vectors = vector.zip({"pt":reco["mu_pt"].array(),
                           "eta":reco["mu_eta"].array(),
@@ -89,9 +87,7 @@ def parse_leptons(reco,selection):
     lepton_data["charge"] = pad_variable(lepton_charge      , Nleptons)
     lepton_data["type"]   = pad_variable(lepton_type      , Nleptons)
 
-
     return lepton_data
-
 
 def parse_neutrinos(truth,selection):
     
@@ -139,7 +135,6 @@ def parse_MET(reco,selection):
     
     return met_data
     
-
 def parse_event_level(reco,selection):
     
     """
@@ -152,10 +147,8 @@ def parse_event_level(reco,selection):
     
     return njets,nbjets,eventNumber
 
-
 def main(infile_name,outfile_name,split_ratio):
     
-    logging.info("Reading input ROOT file and splitting into various lepton multiplicity channels")
     reco  = uproot.open(f"{infile_name}:Reco")
     truth = uproot.open(f"{infile_name}:Truth")
         
@@ -199,7 +192,6 @@ def main(infile_name,outfile_name,split_ratio):
     if any([len(x)!=jet_data.shape[0] for x in [lepton_data,neutrino_data,met_data]]):
         raise ValueError("The arrays are of different length")
     
-    
     hf_train = h5py.File(f"{outfile_name}_train.h5", 'w')
     hf_test  = h5py.File(f"{outfile_name}_test.h5" , 'w')
     
@@ -230,7 +222,6 @@ def main(infile_name,outfile_name,split_ratio):
     hf_train["data"].create_dataset('eventNumber',data=eventNumber[train_mask])
     hf_test["data"].create_dataset('eventNumber',data=eventNumber[test_mask])
     
-
 if __name__ == "__main__":
     main(infile_name=sys.argv[1],
          outfile_name=sys.argv[2],
