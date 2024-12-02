@@ -3,7 +3,7 @@ import uproot
 import awkward as ak
 import vector
 
-from truth_tools import parse_tops_and_Ws, parse_decays, parse_meta, parse_reco, do_matching, examine_matched_indices
+from delphes.truth_tools import parse_tops_and_Ws, parse_decays, parse_meta, parse_reco, do_matching, examine_matched_indices
 
 def main(inname,outname):
     # Load
