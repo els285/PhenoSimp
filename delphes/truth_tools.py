@@ -80,7 +80,8 @@ def parse_reco(tree,r):
     r["jet_eta"]    =  tree["Jet.Eta"].array()
     r["jet_phi"]    =  tree["Jet.Phi"].array()
     r["jet_mass"]   =  tree["Jet.Mass"].array()
-    r["jet_btag"]   = tree["Jet.BTag"].array()
+    r["jet_btag"]   =  tree["Jet.BTag"].array()
+    r["jet_tautag"] =  tree["Jet.TauTag"].array()
 
     r["el_pt"]      =  tree["Electron.PT"].array()
     r["el_eta"]     =  tree["Electron.Eta"].array()
