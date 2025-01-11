@@ -1,22 +1,20 @@
 # PhenoSimp
 Wrapper for tools used for particle physics phenomenology.
 
-`MadLAD` is used to generate MC simulation. The software run in custom singularity containers.
+## Installation
+```bash
+python -m pip install git+https://github.com/els285/PhenoSimp/
+```
 
-`condor` contains a set of wrappers for running MadLAD and
-post-processessing MadLAD outputs via HTCondor.
+## MC generation with MadLAD
 
-`lhe`contains methods for parsing LHE files into awkward structures.
-
-`tools` contains scripts which don't fit into other categories
-
-## Generation
+MadLAD is installed separately and PhenoSimp must point to MadLAD.
 
 The script `condor.generate` builds a directory containing HTCondor submission
 script for running `MadLAD` in via the batch system.
-It is run as
+Run from any location via:
 ```bash
-python -m condor.generate --config=<config_name> --Njobs=X --lhe --hepmc
+python -m phenosimp.madlad.generate --config=<config_name> --Njobs=X --lhe --hepmc
 ```
 where the last two flags are optional and provide the corresponding file formats
 as outputs when the job completes.
