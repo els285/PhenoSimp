@@ -6,11 +6,15 @@ from os.path import isfile, join
 from datetime import datetime
 import argparse
 from warnings import warn 
+from numpy.random import randint
 
+madlad_path = "/data/els285/MCproduction/MadLAD"
 
 class Mad4Condor(object):
     
-    def __init__(self,config_name,cfg,Njobs,lhe,hepmc):
+    
+    def __init__(self,madladpath:str, config_name:str, cfg:dict, Njobs:int, lhe:bool, hepmc:bool):
+        self.madlad_path    = madlad_path
         self.config_name    = config_name
         self.cfg            = cfg
         self.Njobs          = Njobs
@@ -30,11 +34,6 @@ class Mad4Condor(object):
         if self.cfg["run"]["auto-launch"]==False:
             raise ValueError("auto-launch must be set to true for running with Condor")
         
-        self.create_directory()
-        self.write_job_script()
-        self.specify_outputs()
-        self.write_submit_file()        
-
     
     def create_directory(self):
         
@@ -46,26 +45,28 @@ class Mad4Condor(object):
         
 
     def write_job_script(self):
-        text = f"""#!/bin/bash
+        
+        text=f"""#!/bin/bash
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/data/zihanzhang/pkgs/miniforge3/bin/conda' 'shell.bash' 'hook' 2> /dev/null)"
+__conda_setup="$('/data/zihanzhang/pkgs/miniforge3/bin/conda' 'shell.bash' 'hook' 2>/dev/null)"
 if [ $? -eq 0 ]; then
     eval "$__conda_setup"
 else
-    if [ -f "/data/zihanzhang/pkgs/miniforge3/etc/profile.d/conda.sh" ]; then
-        . "/data/zihanzhang/pkgs/miniforge3/etc/profile.d/conda.sh"
-    else
-        export PATH="/data/zihanzhang/pkgs/miniforge3/bin:$PATH"
-    fi
+    . "/data/zihanzhang/pkgs/miniforge3/etc/profile.d/conda.sh" || export PATH="/data/zihanzhang/pkgs/miniforge3/bin:$PATH"
 fi
 unset __conda_setup
 # <<< conda initialize <<<
 conda activate madlad
 
+# Read the random number from the first argument (provided by HTCondor)
+ISEED=$1  # Pass the number from the input file
+
+echo $ISEED
+
 cd MadLAD   # Execute in MadLAD folder
-python -m madlad.generate --config-name={self.config_name} gen.block_run.iseed=$RANDOM
+python -m madlad.generate --config-name={self.config_name} gen.block_run.iseed=$ISEED
 cd -        # Return to condor work directory
 
         """
@@ -93,47 +94,56 @@ cd -        # Return to condor work directory
                 
         if 'block_delphes' in list(self.cfg['gen'].keys()):
             self.outputs_string += f" MadLAD/{self.name}.root, "
-            self.remaps_string  += f"{self.name}.root = delphes_$(Cluster)_$(Process).root; "
+            self.remaps_string  += f"{self.name}.root = $(ClusterId)/{self.name}_$(Process).root; "
             
-
                 
-
     def write_submit_file(self):
         
         text=f"""# Submit file for HTCondor
 universe   = vanilla
 executable = job.sh
-arguments  = $(RandomNumber)
-output     = $(ClusterId).$(Process).out
-error      = $(ClusterId).$(Process).err
-log        = $(ClusterId).$(Process).log
+arguments  = $(iseed)
+output     = $(ClusterId)/logs/$(Process).out
+error      = $(ClusterId)/logs/$(Process).err
+log        = $(ClusterId)/logs/$(Process).log
 request_cpus = 12
 request_memory = 50 GB
 transfer_executable = True
 should_transfer_files = YES
-transfer_input_files    = ../MadLAD
+transfer_input_files = {self.madlad_path}
 transfer_output_files = {self.outputs_string}
 transfer_output_remaps = "{self.remaps_string}"
 
-when_to_transfer_output = ON_EXIT 
+when_to_transfer_output = ON_EXIT
 
-queue {self.Njobs}"""
+# Queue jobs, passing each line from iseeds.txt
+queue iseed from iseeds.txt
+"""
 
         with open(f"{self.condor_directory_name}/submit.sub","w") as file:
             file.write(text)
             
-       
-def main():
+            
+    def generate_iseeds(self):
+        
+        """
+        Generate iseeds.txt file with Njobs different seeds
+        Iseed information: 
+        https://cp3.irmp.ucl.ac.be/projects/madgraph/wiki/IntroGrid
+        https://answers.launchpad.net/mg5amcnlo/+question/254698
+        Max MadGraph iseed is 30081**2
+        """
     
-    parser = argparse.ArgumentParser(description="Generate HTCondor jobs for generation")
-    parser.add_argument("--config", type=str, help="Config name, no need to point to the directory")
-    parser.add_argument("--Njobs", type=int, help="Number of jobs")
-    parser.add_argument("--lhe",action="store_true",required=False)
-    parser.add_argument("--hepmc",action="store_true",required=False)
-    
-    args = parser.parse_args()   
+        iseeds = []
+        with open(f"{self.condor_directory_name}/iseeds.txt", 'w') as f:
+
+            for i in range(self.Njobs):
+                low = i*2000
+                f.write(f"{randint(low,low+1000)} \n")
+             
+def main(args):
          
-    config_filepath = f"MadLAD/processes/{args.config}"
+    config_filepath = f"{madlad_path}/processes/{args.config}"
    
     with open(config_filepath) as stream:
         try:
@@ -143,6 +153,25 @@ def main():
           
     config_name = config_filepath.split("/")[-1]
     
-    RUN = Mad4Condor(config_name,cfg,args.Njobs,args.lhe,args.hepmc)
+    RUN = Mad4Condor(madlad_path,config_name,cfg,args.Njobs,args.lhe,args.hepmc)
+       
+    RUN.create_directory()
+    RUN.write_job_script()
+    RUN.specify_outputs()
+    RUN.write_submit_file()
+    RUN.generate_iseeds()
     
-main()
+    print(f"Directory {RUN.condor_directory_name} created   ")        
+
+    
+if __name__ == '__main__':
+    
+    parser = argparse.ArgumentParser(description="Generate HTCondor jobs for generation")
+    parser.add_argument("--config", type=str, help="Config name, no need to point to the directory")
+    parser.add_argument("--Njobs", type=int, help="Number of jobs")
+    parser.add_argument("--lhe",action="store_true",required=False)
+    parser.add_argument("--hepmc",action="store_true",required=False)
+    
+    args = parser.parse_args()   
+    main(args)
+
