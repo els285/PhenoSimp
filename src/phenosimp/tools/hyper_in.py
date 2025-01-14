@@ -1,0 +1,140 @@
+import uproot
+import numpy as np
+import awkward as ak
+import vector
+import h5py 
+import sys
+
+def build_object_arrays(tree):
+    
+    electron_array = tree.arrays(["el_pt","el_eta","el_phi","el_charge","electron_matched_indices"])
+    electron_mass = 5.1110e-3
+    electron_array["el_mass"] = electron_mass*ak.ones_like(tree["el_pt"].array())
+    
+    muon_array = tree.arrays(["mu_pt","mu_eta","mu_phi","mu_charge","muon_matched_indices"])
+    muon_mass = 0.10566
+    muon_array["mu_mass"] = muon_mass*ak.ones_like(tree["mu_pt"].array())
+    
+    jet_array = tree.arrays(["jet_pt","jet_eta","jet_phi","jet_mass","jet_btag","jet_matched_indices"])
+    
+    met_array = tree.arrays(["met_met","met_phi","met_eta"])
+    
+    return {"electrons" : electron_array,
+            "muons"     : muon_array,
+            "jets"      :jet_array,
+            "met"       :met_array}
+
+required_branches = ['EventNumber', 
+                     'el_pt', 'el_eta', 'el_phi', 'el_charge', 
+                     'mu_pt', 'mu_eta', 'mu_phi', 'mu_charge', 
+                     'jet_pt', 'jet_eta', 'jet_phi', 'jet_mass', 'jet_btag'
+                     'met_met', 'met_eta', 'met_phi', 
+                     'jet_matched_indices','electron_matched_indices', 'muon_matched_indices', 
+                     'contains_duplicates', 'fully_matched']
+
+
+def pad_variable(variable, max_len, pad_to = 0):
+    padded_variable = ak.pad_none(variable, max_len, axis=1, clip=True)
+    return ak.fill_none(padded_variable, pad_to)
+
+def parse(data_array: ak.Array, outfile : str, train_test_split:int = 10) -> None:
+    
+    """
+    Takes a high-level awkward array with a selection pre-applied
+    Writes the output to separate test and train h5 files
+    Args:
+        data_array - a high-level Awkward Array where the selection is pre-applied 
+                        i.e. no further filtering will happen
+        outfile    - the template name of the output h5 file
+    """
+
+    pad_to_jet = int(ak.max(ak.count(data_array["jet_pt"],axis=1)))
+    Nevents = len(data_array["jet_pt"])
+    
+    print("Preparing data")
+    
+    # Globals 
+    njets  = ak.count(data_array["jet_pt"],axis=1).to_numpy()
+    nbjets = ak.count_nonzero(data_array["jet_btag"]==1,axis=1).to_numpy()
+    
+    global_dt   = np.dtype([('njet', np.float32), ('nbTagged', np.float32)])
+    global_data = np.zeros((Nevents, 1), dtype=global_dt)
+    
+    global_data['njet']     = njets.reshape(-1,1)
+    global_data['nbTagged'] = nbjets.reshape(-1,1)
+    
+    # Jets
+    jet_dt  = np.dtype([('e', np.float32), 
+                        ('eta', np.float32), 
+                        ('phi', np.float32), 
+                        ('pt', np.float32), 
+                        ('btag', np.int32), 
+                        ('charge', np.float32),
+                        ('id', np.float32)])
+    jet_data = np.zeros((Nevents, pad_to_jet), dtype=jet_dt)
+
+    jet_vectors = vector.zip({"pt"  : data_array["jet_pt"],
+                            "eta" : data_array["jet_eta"],
+                            "phi" : data_array["jet_phi"],
+                            "m"   : data_array["jet_mass"]})
+    
+    jet_data['e']      = pad_variable(jet_vectors.e   , pad_to_jet)
+    jet_data['eta']    = pad_variable(jet_vectors.eta , pad_to_jet)
+    jet_data['phi']    = pad_variable(jet_vectors.phi , pad_to_jet)
+    jet_data['pt']     = pad_variable(jet_vectors.pt  , pad_to_jet)
+    jet_data['btag']   = pad_variable(data_array["jet_btag"] , pad_to_jet)
+    jet_data['charge'] = np.zeros(Nevents).reshape(-1,1)
+    jet_data['id']     =  1*(np.arange(pad_to_jet) < njets[:, None])
+    
+
+    
+    # Matched Indices
+    jet_indices = pad_variable(data_array["jet_matched_indices"],pad_to_jet,pad_to=-99).to_numpy()
+    jet_indices[jet_indices==-9]=-8
+    jet_indices[jet_indices==-99]=-9
+    jet_truthmatch = jet_indices
+    IndexSelect = data_array["fully_matched"].to_numpy()
+    
+    print("Writing to files")
+
+    # Split into test and train    
+    test_mask = np.arange(0,len(jet_data))%10==0
+    train_mask = ~test_mask
+    
+    # Save to files
+    train_file = outfile.replace(".h5","_train.h5")
+    test_file  = outfile.replace(".h5","_test.h5")
+
+    with h5py.File(train_file, 'w') as h5_file:
+        inputs_group = h5_file.create_group('INPUTS')
+        labels_group = h5_file.create_group('LABELS')
+        inputs_group.create_dataset("jet", data=jet_data[train_mask])
+        inputs_group.create_dataset("global", data=global_data[train_mask])
+        labels_group.create_dataset("VertexID", data=np.array(jet_truthmatch[train_mask]))#, dtype=np.float32))
+        labels_group.create_dataset("IndexSelect", data = np.array(IndexSelect[train_mask], dtype= np.int32))        
+    print(f"File {train_file} written")
+        
+    with h5py.File(test_file, 'w') as h5_file:
+        inputs_group = h5_file.create_group('INPUTS')
+        labels_group = h5_file.create_group('LABELS')
+        inputs_group.create_dataset("jet", data=jet_data[test_mask])
+        inputs_group.create_dataset("global", data=global_data[test_mask])
+        labels_group.create_dataset("VertexID", data=np.array(jet_truthmatch[test_mask], dtype=np.int64))
+        labels_group.create_dataset("IndexSelect", data = np.array(IndexSelect[test_mask], dtype= np.int32))
+    print(f"File {test_file} written")
+        
+def main(infile,outfile):
+    
+    """
+    For parsing directly from a ROOT file 
+    """
+    tree = uproot.open(f"{infile}:Reco")
+    all_branches = [br for br in tree.keys() if br[0]!="n"]
+    event_array = tree.arrays(all_branches)
+    parse(event_array)
+    
+if __name__ == "__main__":
+    infile = sys.argv[1]
+    outfile= sys.argv[2]
+    main(infile,outfile)
+
