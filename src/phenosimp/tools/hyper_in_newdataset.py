@@ -5,6 +5,17 @@ import vector
 import h5py 
 import sys
 
+def save_awkward_to_ROOT(arr: ak.Array , output_file: str , treename: str = "tree"):
+    
+    """
+    Takes an ragged awkward array and saves it to a ROOT file
+    """
+    
+    d = {k:arr[k] for k in arr.fields}
+    with  uproot.recreate(output_file) as file:
+        file[treename] = d
+
+
 def combine_awkward_arrays(list_of_arrays):
     
     """
@@ -51,7 +62,7 @@ required_branches = ['EventNumber',
                      'contains_duplicates', 'fully_matched']
 
 
-def pad_variable(variable, max_len, pad_to = 0):
+def pad_variable(variable, max_len, pad_to = np.nan):
     padded_variable = ak.pad_none(variable, max_len, axis=1, clip=True)
     return ak.fill_none(padded_variable, pad_to)
 
@@ -99,9 +110,8 @@ def parse(data_array                : ak.Array,
                         ('eta', np.float32), 
                         ('phi', np.float32), 
                         ('pt', np.float32), 
-                        ('btag', np.int32), 
-                        ('charge', np.float32),
-                        ('id', np.float32)])
+                        # ('btag', np.int32), 
+                        ('charge', np.float32)])
     jet_data = np.zeros((Nevents, pad_to_jet), dtype=jet_dt)
 
     jet_vectors = vector.zip({"pt"  : data_array["jet_pt"],
@@ -113,16 +123,15 @@ def parse(data_array                : ak.Array,
     jet_data['eta']    = pad_variable(jet_vectors.eta , pad_to_jet)
     jet_data['phi']    = pad_variable(jet_vectors.phi , pad_to_jet)
     jet_data['pt']     = pad_variable(jet_vectors.pt  , pad_to_jet)
-    jet_data['btag']   = pad_variable(data_array["jet_btag"] , pad_to_jet)
-    jet_data['charge'] = np.zeros(Nevents).reshape(-1,1)
-    jet_data['id']     =  1*(np.arange(pad_to_jet) < njets[:, None])
+    # jet_data['btag']   = pad_variable(data_array["jet_btag"] , pad_to_jet, pad_to=np.nan)
+    jet_data['charge'] = pad_variable(ak.zeros_like(data_array["jet_btag"]), pad_to_jet)
     
     jet_indices = pad_variable(data_array["jet_matched_indices"],       pad_to_jet,pad_to=-99).to_numpy()
 
     ################### LEPTONS #####################
     if do_individual_leptons or do_combined_leptons:
         
-        print("Parsing electron and muon separately")
+        # print("Parsing electron and muon separately")
         
         ############ ELECTRONS ####################
         Nelectrons = ak.num(data_array["el_pt"])
@@ -132,7 +141,7 @@ def parse(data_array                : ak.Array,
                             ('eta', np.float32), 
                             ('phi', np.float32), 
                             ('pt', np.float32), 
-                            ('btag', np.int32), 
+                            # ('btag', np.int32), 
                             ('charge', np.float32)])
         el_data = np.zeros((Nevents, pad_to_el), dtype=el_dt)
 
@@ -145,7 +154,7 @@ def parse(data_array                : ak.Array,
         el_data['eta']    = pad_variable(el_vectors.eta , pad_to_el)
         el_data['phi']    = pad_variable(el_vectors.phi , pad_to_el)
         el_data['pt']     = pad_variable(el_vectors.pt  , pad_to_el)
-        el_data['btag']   = np.zeros(Nevents).reshape(-1,1)
+        # el_data['btag']   = pad_variable(ak.zeros_like(el_vectors.pt), pad_to_el)
         el_data['charge'] = pad_variable(data_array["el_charge"] , pad_to_el)
         
         el_indices  = pad_variable(data_array["electron_matched_indices"],   pad_to_el,pad_to=-99).to_numpy()
@@ -159,7 +168,7 @@ def parse(data_array                : ak.Array,
                             ('eta', np.float32), 
                             ('phi', np.float32), 
                             ('pt', np.float32), 
-                            ('btag', np.int32), 
+                            # ('btag', np.int32), 
                             ('charge', np.float32)])
         mu_data = np.zeros((Nevents, pad_to_mu), dtype=mu_dt)
 
@@ -172,7 +181,7 @@ def parse(data_array                : ak.Array,
         mu_data['eta']    = pad_variable(mu_vectors.eta , pad_to_mu)
         mu_data['phi']    = pad_variable(mu_vectors.phi , pad_to_mu)
         mu_data['pt']     = pad_variable(mu_vectors.pt  , pad_to_mu)
-        mu_data['btag']   = np.zeros(Nevents).reshape(-1,1)
+        # mu_data['btag']   = pad_variable(ak.zeros_like(mu_vectors.pt), pad_to_mu)
         mu_data['charge'] = pad_variable(data_array["mu_charge"] , pad_to_mu)
         
         mu_indices  = pad_variable(data_array["muon_matched_indices"],  pad_to_mu,pad_to=-99).to_numpy()
@@ -187,7 +196,7 @@ def parse(data_array                : ak.Array,
                             ('eta', np.float32), 
                             ('phi', np.float32), 
                             ('pt', np.float32), 
-                            ('btag', np.int32), 
+                            # ('btag', np.int32), 
                             ('charge', np.float32)])
         lep_data = np.zeros((Nevents, pad_to_lep), dtype=lep_dt)
         
@@ -196,13 +205,13 @@ def parse(data_array                : ak.Array,
         lep_order = ak.argsort(og_lep_vectors.pt,ascending=False)
         lep_vectors = og_lep_vectors[lep_order]
         lep_charge  = ak.concatenate([data_array["el_charge"],data_array["mu_charge"]],axis=1)[lep_order]
-        lep_indices = ak.concatenate([data_array["electorn_matched_indices"],data_array["muon_matched_indices"]],axis=1)[lep_order]
+        lep_indices = ak.concatenate([data_array["electron_matched_indices"],data_array["muon_matched_indices"]],axis=1)[lep_order]
         
         lep_data['e']      = pad_variable(lep_vectors.e   , pad_to_lep)
         lep_data['eta']    = pad_variable(lep_vectors.eta , pad_to_lep)
         lep_data['phi']    = pad_variable(lep_vectors.phi , pad_to_lep)
         lep_data['pt']     = pad_variable(lep_vectors.pt  , pad_to_lep)
-        lep_data['btag']   = np.zeros(Nevents).reshape(-1,1)
+        # lep_data['btag']   = pad_variable(ak.zeros_like(lep_charge), pad_to_lep)
         lep_data['charge'] = pad_variable(lep_charge , pad_to_lep)
         
         lep_indices  = pad_variable(lep_indices,   pad_to_lep,pad_to=-99).to_numpy()
@@ -229,13 +238,13 @@ def parse(data_array                : ak.Array,
         
         if do_individual_leptons:
             inputs_group.create_dataset("ELECTRON", data=el_data[train_mask])
-            labels_group.carate_dataset("ELECTRON", data=el_indices[train_mask])
+            labels_group.create_dataset("ELECTRON", data=el_indices[train_mask])
             inputs_group.create_dataset("MUON",     data=mu_data[train_mask])
-            labels_group.carate_dataset("MUON",     data=mu_indices[train_mask])
+            labels_group.create_dataset("MUON",     data=mu_indices[train_mask])
 
         if do_combined_leptons:
             inputs_group.create_dataset("LEPTON",     data=lep_data[train_mask])
-            labels_group.carate_dataset("LEPTON",     data=lep_indices[train_mask])
+            labels_group.create_dataset("LEPTON",     data=lep_indices[train_mask])
 
         inputs_group.create_dataset("JET",          data=jet_data[train_mask])
         labels_group.create_dataset("JET",          data=jet_indices[train_mask])
@@ -252,13 +261,13 @@ def parse(data_array                : ak.Array,
         
         if do_individual_leptons:
             inputs_group.create_dataset("ELECTRON", data=el_data[test_mask])
-            labels_group.carate_dataset("ELECTRON", data=el_indices[test_mask])
+            labels_group.create_dataset("ELECTRON", data=el_indices[test_mask])
             inputs_group.create_dataset("MUON",     data=mu_data[test_mask])
-            labels_group.carate_dataset("MUON",     data=mu_indices[test_mask])
+            labels_group.create_dataset("MUON",     data=mu_indices[test_mask])
 
         if do_combined_leptons:
             inputs_group.create_dataset("LEPTON",     data=lep_data[test_mask])
-            labels_group.carate_dataset("LEPTON",     data=lep_indices[test_mask])
+            labels_group.create_dataset("LEPTON",     data=lep_indices[test_mask])
 
         inputs_group.create_dataset("JET",          data=jet_data[test_mask])
         labels_group.create_dataset("JET",          data=jet_indices[test_mask])
