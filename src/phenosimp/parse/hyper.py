@@ -13,6 +13,7 @@ def parse(data_array                : ak.Array,
           do_individual_leptons     : str = False, 
           do_combined_leptons       : str = True,
           do_neutrinos              : str = False,
+          do_shuffle                : bool = False,
           train_test_split          : int = 10) -> None:
     
     """
@@ -33,7 +34,9 @@ def parse(data_array                : ak.Array,
     pad_to_jet = int(ak.max(ak.count(data_array["jet_pt"],axis=1)))
     Nevents = len(data_array["jet_pt"])
     
-    print("Preparing data")
+    console.print("Preparing data")
+    # The data dictionary which will contain everything
+    data_dict = {}
     
     # Globals 
     njets  = ak.count(data_array["jet_pt"],axis=1).to_numpy()
@@ -45,8 +48,10 @@ def parse(data_array                : ak.Array,
     global_data['njet']     = njets.reshape(-1,1)
     global_data['nbTagged'] = nbjets.reshape(-1,1)
     
+    data_dict["global_data"] = global_data
+    
     # Jets
-    print("Parsing jets")
+    console.print("Parsing jets")
     jet_dt  = np.dtype([('e', np.float32), 
                         ('eta', np.float32), 
                         ('phi', np.float32), 
@@ -67,7 +72,10 @@ def parse(data_array                : ak.Array,
     # jet_data['btag']   = pad_variable(data_array["jet_btag"] , pad_to_jet, pad_to=np.nan)
     jet_data['charge'] = pad_variable(ak.zeros_like(data_array["jet_btag"]), pad_to_jet)
     
-    jet_indices = pad_variable(data_array["jet_matched_indices"],       pad_to_jet,pad_to=-99).to_numpy()
+    jet_indices = pad_variable(data_array["jet_matched_indices"],       pad_to_jet,pad_to=np.nan).to_numpy()
+    
+    data_dict["jet_data"]    = jet_data
+    data_dict["jet_indices"] = jet_indices
 
     ################### LEPTONS #####################
     if do_individual_leptons or do_combined_leptons:
@@ -127,6 +135,11 @@ def parse(data_array                : ak.Array,
         
         mu_indices  = pad_variable(data_array["muon_matched_indices"],  pad_to_mu,pad_to=-99).to_numpy()
         
+        data_dict["el_data"]    = el_data 
+        data_dict["el_indices"] = el_indices
+        data_dict["mu_data"]    = mu_data 
+        data_dict["mu_indices"] = mu_indices
+        
     if do_combined_leptons:
                 
         print("Parsing charged leptons as one object")
@@ -155,68 +168,66 @@ def parse(data_array                : ak.Array,
         # lep_data['btag']   = pad_variable(ak.zeros_like(lep_charge), pad_to_lep)
         lep_data['charge'] = pad_variable(lep_charge , pad_to_lep)
         
-        lep_indices  = pad_variable(lep_indices,   pad_to_lep,pad_to=-99).to_numpy()
+        lep_indices  = pad_variable(lep_indices,   pad_to_lep, pad_to=np.nan).to_numpy()
+        
+        data_dict["lep_data"]    = lep_data 
+        data_dict["lep_indices"] = lep_indices
         
     FullyMatched = data_array["fully_matched"].to_numpy()
+    data_dict["FullyMatched"] = FullyMatched
     
     """
     Writing to file
     """
     print("Writing to files")
+    
+    # Shuffle the file if needed
+    if do_shuffle:
+        shuffle_indices = np.random.permutation(Nevents)
+        data_dict = {key: value[shuffle_indices] for key, value in data_dict.items()}
 
     # Split into test and train    
     test_mask = np.arange(0,len(jet_data))%train_test_split==0
     train_mask = ~test_mask
     
+    train_dict = {key: value[train_mask] for key, value in data_dict.items()}
+    test_dict  = {key: value[test_mask]  for key, value in data_dict.items()}
+    
     # Save to files
     train_file = f"{outfile}_train.h5"
     test_file  = f"{outfile}_test.h5"
+    
+    write_to_h5(train_file,train_dict,do_individual_leptons,do_combined_leptons)
+    write_to_h5(test_file,test_dict,do_individual_leptons,do_combined_leptons)
+    
+def write_to_h5(filename:str , 
+                data_dict: dict, 
+                do_individual_leptons:bool,
+                do_combined_leptons:bool) -> None: 
 
-    with h5py.File(train_file, 'w') as h5_file:
-        inputs_group = h5_file.create_group('INPUTS')
-        labels_group = h5_file.create_group('LABELS')
+    with h5py.File(filename, 'w') as h5_file:
+        inputs_group   = h5_file.create_group('INPUTS')
+        labels_group   = h5_file.create_group('LABELS')
         metadata_group = h5_file.create_group("METADATA")
         
         if do_individual_leptons:
-            inputs_group.create_dataset("ELECTRON", data=el_data[train_mask])
-            labels_group.create_dataset("ELECTRON", data=el_indices[train_mask])
-            inputs_group.create_dataset("MUON",     data=mu_data[train_mask])
-            labels_group.create_dataset("MUON",     data=mu_indices[train_mask])
+            inputs_group.create_dataset("ELECTRON", data=data_dict["el_data"])
+            labels_group.create_dataset("ELECTRON", data=data_dict["el_indices"])
+            inputs_group.create_dataset("MUON",     data=data_dict["mu_data"])
+            labels_group.create_dataset("MUON",     data=data_dict["mu_indices"])
 
         if do_combined_leptons:
-            inputs_group.create_dataset("LEPTON",     data=lep_data[train_mask])
-            labels_group.create_dataset("LEPTON",     data=lep_indices[train_mask])
+            inputs_group.create_dataset("LEPTON",     data=data_dict["lep_data"])
+            labels_group.create_dataset("LEPTON",     data=data_dict["lep_indices"])
 
-        inputs_group.create_dataset("JET",          data=jet_data[train_mask])
-        labels_group.create_dataset("JET",          data=jet_indices[train_mask])
-        inputs_group.create_dataset("GLOBAL",       data=global_data[train_mask])
+        inputs_group.create_dataset("JET",          data=data_dict["jet_data"])
+        labels_group.create_dataset("JET",          data=data_dict["jet_indices"])
         
-        metadata_group.create_dataset("FullyMatched",  data = np.array(FullyMatched[train_mask], dtype= np.int32))  
-              
-    print(f"File {train_file} written")
+        inputs_group.create_dataset("GLOBAL",       data=data_dict["global_data"])
         
-    with h5py.File(test_file, 'w') as h5_file:
-        inputs_group = h5_file.create_group('INPUTS')
-        labels_group = h5_file.create_group('LABELS')
-        metadata_group = h5_file.create_group("METADATA")
-        
-        if do_individual_leptons:
-            inputs_group.create_dataset("ELECTRON", data=el_data[test_mask])
-            labels_group.create_dataset("ELECTRON", data=el_indices[test_mask])
-            inputs_group.create_dataset("MUON",     data=mu_data[test_mask])
-            labels_group.create_dataset("MUON",     data=mu_indices[test_mask])
-
-        if do_combined_leptons:
-            inputs_group.create_dataset("LEPTON",     data=lep_data[test_mask])
-            labels_group.create_dataset("LEPTON",     data=lep_indices[test_mask])
-
-        inputs_group.create_dataset("JET",          data=jet_data[test_mask])
-        labels_group.create_dataset("JET",          data=jet_indices[test_mask])
-        inputs_group.create_dataset("GLOBAL",       data=global_data[test_mask])
-        
-        metadata_group.create_dataset("FullyMatched",  data = np.array(FullyMatched[test_mask], dtype= np.int32))  
-        
-    print(f"File {test_file} written")
+        metadata_group.create_dataset("FullyMatched",  data = np.array(data_dict["FullyMatched"], dtype= np.int32))  
+            
+    print(f"File {filename} written")
     
 
 def create_directory_structure(parent_dir):
@@ -236,6 +247,7 @@ def create_directory_structure(parent_dir):
     # Print out confirmation
     print(f"Created subdirectories: {raw_dir} and {processed_dir}")
     
+    
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Parse input data and handle output options.")
     
@@ -243,12 +255,14 @@ def parse_arguments():
     parser.add_argument('infile', type=str, help='The output file where results will be saved.')
     parser.add_argument('outfile', type=str, help='The output file where results will be saved.')
 
-    parser.add_argument('--individual_leptons', type=str, choices=['True', 'False'], default='False', 
+    parser.add_argument('--individual_leptons', action='store_true', 
                         help='Flag to include individual leptons (True or False).')
-    parser.add_argument('--combined_leptons', type=str, choices=['True', 'False'], default='True', 
+    parser.add_argument('--combined_leptons', action='store_true', 
                         help='Flag to include combined leptons (True or False).')
-    parser.add_argument('--neutrinos', type=str, choices=['True', 'False'], default='False', 
+    parser.add_argument('--neutrinos', action='store_true', 
                         help='Flag to include neutrinos (True or False).')
+    parser.add_argument('--shuffle', action='store_true',
+                        help='Re-arrange the order of the data randomly')
     parser.add_argument('--split', type=int, default=10, 
                         help='Train-test split percentage (default is 10).')
 
@@ -263,11 +277,6 @@ if __name__ == '__main__':
 
     # Create a console object to print output with rich formatting
     console = Console()
-    
-    # Convert 'True'/'False' strings to actual booleans
-    do_individual_leptons = args.individual_leptons == 'True'
-    do_combined_leptons = args.combined_leptons == 'True'
-    do_neutrinos = args.neutrinos == 'True'
     
     outfile = args.outfile.replace(".h5","")
     
@@ -285,9 +294,10 @@ if __name__ == '__main__':
     table.add_column("Value", style="bold cyan")
 
     # Add rows to the table
-    table.add_row("Individual charged leptons", str(do_individual_leptons))
-    table.add_row("Combined charged leptons", str(do_combined_leptons))
-    table.add_row("Neutrinos", str(do_neutrinos))
+    table.add_row("Individual charged leptons", str(args.individual_leptons))
+    table.add_row("Combined charged leptons", str(args.combined_leptons))
+    table.add_row("Neutrinos", str(args.neutrinos))
+    table.add_row("Shuffle", str(args.shuffle))
     table.add_row("Train-test split", str(args.split))
 
     # Print the table to the console
@@ -313,8 +323,9 @@ if __name__ == '__main__':
     # Call the function with parsed arguments
     parse(data_array=event_array,
         outfile=f"{outfile}/raw/{outfile}",
-        do_individual_leptons=do_individual_leptons,
-        do_combined_leptons=do_combined_leptons,
-        do_neutrinos=do_neutrinos,
+        do_individual_leptons=args.individual_leptons,
+        do_combined_leptons=args.combined_leptons,
+        do_neutrinos=args.neutrinos,
+        do_shuffle=args.shuffle,
         train_test_split=args.split)
         
