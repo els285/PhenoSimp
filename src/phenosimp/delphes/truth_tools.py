@@ -72,7 +72,7 @@ def parse_meta(tree,d):
     
     return d
 
-def parse_reco(tree,r):
+def parse_reco(tree,r,do_substructure=False):
 
     r["EventNumber"]      = tree["Event.Number"].array()
 
@@ -82,6 +82,15 @@ def parse_reco(tree,r):
     r["jet_mass"]   =  tree["Jet.Mass"].array()
     r["jet_btag"]   =  tree["Jet.BTag"].array()
     r["jet_tautag"] =  tree["Jet.TauTag"].array()
+    
+    if do_substructure:
+        r["EhadOverEem"]                =  tree["Jet.EhadOverEem"].array()
+        r["NCharged"]                   =  tree["Jet.NCharged"].array()
+        r["NNeutrals"]                  =  tree["Jet.NNeutrals"].array()
+        r["NeutralEnergyFraction"]      =  tree["Jet.NeutralEnergyFraction"].array()
+        r["ChargedEnergyFraction"]      =  tree["Jet.ChargedEnergyFraction"].array()
+        r["MeanSqDeltaR"]               =  tree["Jet.MeanSqDeltaR"].array()
+
 
     r["el_pt"]      =  tree["Electron.PT"].array()
     r["el_eta"]     =  tree["Electron.Eta"].array()
